@@ -1,0 +1,271 @@
+---
+title: "Hypothesis"
+author: "Ali Ramezanian Nik"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    highlight: monochrome
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE,  fig.height=4)
+set.seed(101)
+install.packages("caret")
+install.packages("C50")
+install.packages("neuralnet")
+install.packages("ggplot2")
+install.packages("lattice")
+library("neuralnet")
+library("C50")
+library("caret")
+library("ggplot2")
+library("lattice")
+```
+
+#DISCLAIMER  
+
+My machine is an old machine and every training takes 1 nights (because I am using   
+my computer during the day doing other assignments).
+So I used 10000 of data for this assignment.
+
+# Introduction
+
+In this Assignment we want to state some hypothesis and decide on them. In the previous\
+article about Exploratory Data Analysis we just clean and explored the data. In this article\
+we try to guess some hypothesis and trying to validate them.
+
+But before doing anything let's look at our data again to review and refresh our mind from our famous dataset:
+
+```{r fig.width=5, warning=FALSE}
+diamonds <- read.csv("DiamondDataComplete.csv")
+summary(diamonds)
+```
+
+# Hypothesis
+
+In this part we guess two hypothesis and we try to validate them.
+
+## First Hypothesis
+
+We are 90% sure if we pick 10 sample of diamonds with VS1 clarity , their mean price with standard deviation of 12 are less than 3800. i.e, 100 less than the mean price of total diamonds (3925). Here are our hypothesis:
+
+```         
+H0: u >= 3925
+H1: u < 3925
+```
+
+Also we can extract these variables from the hypothesis text and we will use them to try to prove our hypothesis.
+
+Now with the information we have lets calculate the hypothesis:
+
+```{r}
+xbar <- 3800
+s <- 12
+u0 <- 3925
+n <- 10
+degree_of_freedom <- 10 - 1 
+t_critical <- -1.833
+t_calculated <- (xbar - u0) / (s/sqrt(n))
+t_calculated
+```
+
+The calculated t is not bigger than the critical t and with 95% confidence\
+we can not accept the null hypothesis that the average of selected sample is\
+above 3925 and we reject NULL hypothesis.
+
+## Second hypothesis
+
+We believe that because Ideal and Premium cuts having almost the same semantic meaning in English and they are almost identical words, so if we randomly select 50 samples from Ideal cuts and 60 samples from Premium cuts with calculated standard deviations that you see below, there should not be any different in the mean of prices with 10% significance level.
+
+here is our hypothesis:
+
+```         
+h0: u1 == u2  u1-u2 = 0  
+
+h1: u1 != u2  u1-u2 != 0
+```
+
+```{r}
+ideal_diamonds <- subset(diamonds, cut == "Ideal")
+sample_ideal <- sample(ideal_diamonds$price, 50)
+sd_ideal <- sd(sample_ideal)
+mean_ideal <- mean(sample_ideal)
+
+premium_diamonds <- subset(diamonds, cut == "Premium")
+sample_premium <- sample(premium_diamonds$price, 60)
+sd_premium <- sd(sample_premium)
+mean_premium <- mean(sample_premium)
+```
+
+We calculated the standard deviation and now we have all information that is needed to\
+to check the hypothesis:
+
+ideal: n = 50, xbar1 = `r round(mean_ideal,2)`, s1 = `r round(sd_ideal,2)`
+
+premium: n = 60, xbar2 = `r round(mean_premium,2)`, s2 = `r round(sd_premium,2)`
+
+significance_level = 10% ===\> confidence_level = 100% - significance_level = 90% and z(90%) == 1.645 so if z_critial become more than 1.645 or z_critical become less than \> -1.645 we should reject the h0 (null hypothesis)
+
+```{r}
+z_critical <- ((mean_ideal-mean_premium) - (0))/sqrt(((sd_ideal*sd_ideal)/50)+((sd_premium*sd_premium)/60))
+z_critical
+```
+
+As you can observe the z_ciritical is `r z_critical` and it is more than -1.645 and less than 1.645 and so hooooray, we reject the null hypothesis. so we can accept the alternative hypothesis.
+
+# Split data to Train And Test (75% to 25%)
+
+In this part we divde the dataset into two groups: train and test. the train dataset is 75% of total dataset\
+and test data set is 25% of total dataset.
+
+```{r}
+trainingInd <- createDataPartition(diamonds$price, p= 0.75, list = F)
+training_data <- diamonds[trainingInd,]
+test_data <- diamonds[-trainingInd,]
+```
+
+# Linear Regression with Multiple Variables and Calculate "adjusted R squared"
+
+Now lets calculate linear regression and adjusted R squared.
+
+```{r}
+linear_mulvar_reg <- lm(price ~ cut+carat + cut + color + clarity + table+x+y+z+depth, data = training_data)
+summary(linear_mulvar_reg)
+```
+
+As you can see the "adjusted R squared" is 0.9192 and it is almost near to 1 and\
+it means that the variables can explain price very well. Also carat is the best variable we can explain price base on that.
+
+# Test the model
+
+```{r}
+predictions <- predict(linear_mulvar_reg, newdata = test_data)
+summary(predictions)
+RMSE <- sqrt(mean((predictions - test_data$price)^2))
+RMSE
+cor(predictions, test_data$price)
+```
+
+As you can see the correlation of predicted data and real answer is about 0.95 and\
+that means that the model is working well.\
+RMSE is a big number and we hope it reduce and be near zero after we normalize dataset.
+
+# Normalization
+
+This time we first normalize dataset with preProcess function and redo previous\
+steps to compare correlation and RMSE with previous step correlation and RMSE.
+
+```{r}
+preProcessed <- preProcess(training_data, method = c("center", "scale"))
+
+pre_train <- predict(preProcessed, training_data)
+pre_test <- predict(preProcessed, test_data)
+
+pre_linear_mulvar_reg <- lm(price ~ cut+carat + cut + color + clarity + table+x+y+z+depth, data = pre_train)
+summary(pre_linear_mulvar_reg)
+
+pre_predictions <- predict(pre_linear_mulvar_reg, newdata = pre_test)
+summary(pre_predictions)
+pre_RMSE <- sqrt(mean((pre_predictions - pre_test$price)^2))
+pre_RMSE
+cor(pre_predictions, pre_test$price)
+
+```
+
+The difference of this iteration is that the RMSE become much smaller this time and\
+changed from 1121.712 to 0.2812234 this time.\
+Ideal RMSE is 0 and and we calculated it as 0.2812234. this shows that the test data\
+responses are very well. because correlation is near 1 and RMSE is near 0.
+
+# Split data to Train And Test (80% to 20%)
+
+In this part we will use machine learning algorithms to train our models and investigate the  
+results.
+
+# kNN
+K nearest neighbors is the first machine learning algorithm that we will use it.
+
+```{r}
+s <- sample(nrow(diamonds), size=10000, replace = FALSE, prob = NULL) 
+di <- diamonds[s, ]
+
+trainingInd <- createDataPartition(di$cut, p= 0.8, list = F)
+cut_train <- di[trainingInd,]
+cut_test <- di[-trainingInd,]
+
+
+trainctrl <- trainControl(method = "repeatedcv", number = 5, repeats = 2)
+knn_fit <- train(cut ~ ., data = cut_train, method = "knn", trControl = trainctrl, preProcess = c("center", "scale"), tuneLength = 10)
+knn_fit
+knnPredict <- predict(knn_fit, newdata = cut_test )
+caret::confusionMatrix(knnPredict, as.factor(cut_test$cut))
+
+featurePlot(x = cut_train, y = as.factor(cut_train$cut), plot = "density",
+            strip=strip.custom(par.strip.text=list(cex=.7)), 
+            scales = list(x = list(relation="free"), y = list(relation="free")))
+
+```
+
+As you can observe from confusion matrix, Ideal and Premium cuts has the best sensitivity rate,\
+and we can conclude by observing featurePlot that the most effective feature in classification is\
+the table of a diamond because the table plot has the most distinct curves and we can guess that the\
+two most distinct curves are Ideal and Premium curves.
+
+# C5.0
+In this second part of training and testing we are using C5.0 that is an implementation  
+of decision tree algorithm.  
+
+```{r}
+C5_fit <- train(cut~., data = cut_train, method = "C5.0")
+C5_fit
+C5_predict <- predict(C5_fit, newdata = cut_test )
+confusionMatrix(C5_predict, as.factor(cut_test$cut))
+```
+
+The accuracy of C5.0 is above 70% and Ideal cuts are about 92% sensitive and then premium\
+cuts are about 77% sensitive.
+
+# ANN
+
+And in the last part Artificial Neural Networks enters the game and try to act like human neurons  
+which update themselves in each iteration (experience).
+
+```{r}
+normalize <- function(x) {
+  return((x - min(x)) / (max(x) - min(x)))
+}
+diamonds_dummy <- di
+diamonds_dummy$cut <- as.factor(diamonds_dummy$cut)
+diamonds_dummy$clarity <- as.factor(diamonds_dummy$clarity)
+diamonds_dummy$color <- as.factor(diamonds_dummy$color)
+
+diamonds_dummy$cut <- as.numeric(diamonds_dummy$cut)
+diamonds_dummy$clarity <- as.numeric(diamonds_dummy$clarity)
+diamonds_dummy$color <- as.numeric(diamonds_dummy$color)
+
+diamonds_normalized <- as.data.frame(lapply(diamonds_dummy, normalize))
+
+trainingInd <- createDataPartition(diamonds_normalized$cut, p= 0.8, list = F)
+diamonds_training <- diamonds_normalized[trainingInd,]
+diamonds_test <- diamonds_normalized[-trainingInd,]
+
+ANN_fit <- neuralnet(cut ~ ., data = diamonds_training, hidden = 5, linear.output = F, threshold = 0.3)
+ANN_results <- neuralnet::compute(ANN_fit, diamonds_test[, names(diamonds_test) != "cut"])
+predicted_cut <- ANN_results$net.result
+ANN_final <- cor(predicted_cut, diamonds_test$cut)
+ANN_final
+```
+
+You can observe the trained ANN model with its weights and the correlation between the true data and  
+result is `r ANN_final`
+
+# Comparison  
+We can observe that the ANN accuracy is about 55% and C5.0 accuracy is about 74%  
+and the accuracy of kNN is 59%.
+So we can conculde that with the data we provided C5.0 is the best.   
+Althought we can guess that if provides more data the ANN is the winner.
+
